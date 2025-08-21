@@ -8,9 +8,9 @@ st.set_page_config(page_title="DIDALE", layout="wide")
 # CABEÇALHO
 col1, col2 = st.columns([1, 4])
 with col1:
-st.markdown("### Apresentação")
+    st.markdown("### Apresentação")
 with col2:
-st.markdown("""
+    st.markdown("""
 <div style='text-align: right; font-size: 20px; font-weight: bold;'>
 DIDALE - Dossiê Interativo dos descritores das Avaliações em Larga Escala
 </div>
