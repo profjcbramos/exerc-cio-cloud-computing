@@ -1,7 +1,6 @@
 import streamlit as st
 # --- Página: Análise de Resultados ---
-if "Análise de Resultados" in st.session_state.get("pagina", ""):
-    col1, col2 = st.columns([1, 4])
+col1, col2 = st.columns([1, 4])
 with col1:
     st.markdown("### Análise de Resultados")
 with col2:

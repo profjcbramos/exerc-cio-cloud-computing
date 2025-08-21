@@ -1,8 +1,7 @@
 # --- Página: Descobrindo Relações ---
 
 import streamlit as st
-if "Descobrindo Relações" in st.session_state.get("pagina", ""):
-    col1, col2 = st.columns([1, 4])
+col1, col2 = st.columns([1, 4])
 with col1:
     st.markdown("### Descobrindo Relações")
 with col2:
