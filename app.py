@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image
 
-st.set_page_config(page_title="DIDALE", layout="wide")
+st.set_page_config(page_title="DIDALE", layout="wide", initial_sidebar_state="expanded")
 
 
 # CABEÇALHO - Em linha única e próximo do topo
