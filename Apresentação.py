@@ -57,4 +57,4 @@ with col2:
     with st.container():
         st.subheader ("Bases de dados", divider=True)
     with st.container():
-        st.subheader ("Metodologia", divider=True)
+        st.subheader ("Metodologia", divider=False)
