@@ -1,4 +1,5 @@
 streamlit
+<<<<<<< HEAD
 pandas
 datetime
 pathlib
@@ -31,3 +32,4 @@ folium>=0.15.0
 
 # === Diversos ===
 unicodedata2>=15.1.0   # normalização de acentos (se não estiver no core)
+>>>>>>> aec44259c258c9ef4d68f2404eb61b879a54b78c
