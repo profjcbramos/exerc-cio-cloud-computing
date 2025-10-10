@@ -1,12 +1,3 @@
-streamlit
-<<<<<<< HEAD
-pandas
-datetime
-pathlib
-re
-=======
-Pillow>=10.0.0
-
 # === Núcleo do projeto ===
 pandas>=2.0.0
 numpy>=1.24.0
@@ -32,4 +23,5 @@ folium>=0.15.0
 
 # === Diversos ===
 unicodedata2>=15.1.0   # normalização de acentos (se não estiver no core)
->>>>>>> aec44259c258c9ef4d68f2404eb61b879a54b78c
+
+Pillow>=10.0.0
