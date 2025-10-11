@@ -1,5 +1,8 @@
 import streamlit as st
 from PIL import Image
+import pandas as pd
+import io
+import os
 
 st.set_page_config(page_title="DIDALE", layout="wide", initial_sidebar_state="expanded")
 
@@ -54,7 +57,48 @@ with col1:
         """, unsafe_allow_html=True)
 
 with col2:
-    with st.container():
-        st.subheader ("Bases de dados", divider=True)
-    with st.container():
-        st.subheader ("Metodologia", divider=False)
+    with col2:
+        
+
+        with st.container():
+            st.subheader("Metodologia", divider=False)
+
+            st.markdown("""
+            <div class="justificado">
+            A metodologia aplicada inclui o mapeamento entre descritores e habilidades, análise semântica de termos, e
+            visualização de resultados por níveis (escola, regional e estado), visando apoiar o uso pedagógico dos indicadores.
+            </div>
+            """, unsafe_allow_html=True)
+with st.container():
+    st.subheader("Bases de dados", divider=True)
+
+    caminho_base = r"data/base_tratada.parquet"
+
+    if os.path.exists(caminho_base):
+        try:
+            df = pd.read_parquet(caminho_base)
+
+            st.markdown("""
+            <div class="justificado">
+            A base unificada tratada reúne informações das avaliações AMA e Paebes, vinculando descritores, habilidades da BNCC e
+            resultados de desempenho das escolas e regionais. Abaixo, uma amostra inicial da base carregada:
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.dataframe(df.head(10), use_container_width=True)
+            st.caption(f"📊 Total de registros: {df.shape[0]} linhas | {df.shape[1]} colunas")
+
+            # --- DESCRIBE ---
+            st.subheader("Resumo estatístico", divider=False)
+            st.dataframe(df.describe(include='all').T, use_container_width=True)
+
+            # --- INFO ---
+            st.subheader("Estrutura da base", divider=False)
+            buffer = io.StringIO()
+            df.info(buf=buffer)
+            st.text(buffer.getvalue())
+
+        except Exception as e:
+            st.error(f"Erro ao carregar a base tratada: {e}")
+    else:
+        st.warning("⚠️ A base tratada ainda não foi gerada. Execute o script `preparar_base.py` antes de continuar.")
