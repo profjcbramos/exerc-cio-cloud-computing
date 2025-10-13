@@ -117,7 +117,38 @@ elif nivel == "Estado":
     # Isso representa a rede estadual completa
     pass
 
+# =======================================
+# CÁLCULO UNIFICADO DA TAXA DE ACERTO
+# =======================================
+df_filt = df_filt.copy()
+df_filt["QTD_ACERTOS"] = pd.to_numeric(df_filt["QTD_ACERTOS"], errors="coerce").fillna(0)
+df_filt["QTD_ERROS"] = pd.to_numeric(df_filt["QTD_ERROS"], errors="coerce").fillna(0)
 
+# --- Taxa de acerto ponderada ---
+df_filt["TX_ACERTO"] = np.where(
+    (df_filt["QTD_ACERTOS"] + df_filt["QTD_ERROS"]) > 0,
+    (df_filt["QTD_ACERTOS"] / (df_filt["QTD_ACERTOS"] + df_filt["QTD_ERROS"])) * 100,
+    np.nan
+)
+
+# =======================================
+# MERGE COM A BASE DE DESCRITORES
+# =======================================
+descritores_info = pd.read_csv(
+    '/workspaces/exerc-cio-cloud-computing/data/descritores_paebes_23_24.csv',
+    encoding='ISO-8859-1', sep=';'
+)
+descritores_info["CD_DESCRITOR"] = descritores_info["CD_DESCRITOR"].astype(str).str.strip()
+descritores_info["NM_DESCRITOR"] = descritores_info["NM_DESCRITOR"].astype(str).str.strip()
+
+df_filt["CD_DESCRITOR"] = df_filt["CD_DESCRITOR"].astype(str).str.strip()
+
+# --- Junta as descrições dos descritores ---
+df_descritor = df_filt.merge(descritores_info, on="CD_DESCRITOR", how="left")
+
+# =======================================
+# TABS
+# =======================================
 st.markdown("---")
 tab1, tab2, tab3 = st.tabs([
     "📈 Desempenho nas últimas avaliações",
@@ -136,12 +167,16 @@ with tab1:
     if df_2025.empty:
         st.warning("Não há dados de 2025 disponíveis.")
     else:
+        # --- Agregar corretamente ---
         df_grouped = (
-            df_2025.groupby(["CD_DESCRITOR", "NM_AVALIACAO"], as_index=False)["TX_ACERTO"]
-            .mean()
-            .sort_values(["NM_AVALIACAO", "CD_DESCRITOR"])
+            df_2025.groupby(["CD_DESCRITOR", "NM_AVALIACAO"], as_index=False)
+            .agg({"QTD_ACERTOS": "sum", "QTD_ERROS": "sum"})
         )
+        df_grouped["TX_ACERTO"] = (
+            df_grouped["QTD_ACERTOS"] / (df_grouped["QTD_ACERTOS"] + df_grouped["QTD_ERROS"])
+        ) * 100
 
+        # --- Gráfico de barras agrupadas ---
         fig_bar = px.bar(
             df_grouped,
             x="CD_DESCRITOR",
@@ -149,11 +184,12 @@ with tab1:
             color="NM_AVALIACAO",
             barmode="group",
             title=f"Desempenho por descritor - {componente} (Avaliações 2025)",
-            labels={"TX_ACERTO": "Taxa de acerto", "CD_DESCRITOR": "Descritor", "NM_AVALIACAO": "Avaliação"},
+            labels={"TX_ACERTO": "Taxa de acerto (%)", "CD_DESCRITOR": "Descritor", "NM_AVALIACAO": "Avaliação"},
             text_auto=".1f",
         )
         fig_bar.update_layout(xaxis_tickangle=-45, height=500)
         st.plotly_chart(fig_bar, use_container_width=True)
+
 
 # ==============================
 # TAB 2: SÉRIE HISTÓRICA
@@ -164,20 +200,18 @@ with tab2:
     if df_filt.empty:
         st.warning("Nenhum dado encontrado com os filtros aplicados.")
     else:
-        # --- Agregação correta: somar acertos e erros por data e descritor ---
         df_time = (
             df_filt.groupby(["DT_REFERENCIA", "CD_DESCRITOR"], as_index=False)
             .agg({"QTD_ACERTOS": "sum", "QTD_ERROS": "sum"})
         )
 
-        # --- Calcular taxa ponderada ---
         df_time["TX_ACERTO"] = np.where(
             (df_time["QTD_ACERTOS"] + df_time["QTD_ERROS"]) > 0,
             (df_time["QTD_ACERTOS"] / (df_time["QTD_ACERTOS"] + df_time["QTD_ERROS"])) * 100,
             np.nan,
         )
 
-        # --- Gráfico de linha (série histórica) ---
+        # --- Linha histórica ---
         fig_line = px.line(
             df_time,
             x="DT_REFERENCIA",
@@ -191,18 +225,14 @@ with tab2:
         fig_line.update_layout(height=500)
         st.plotly_chart(fig_line, use_container_width=True)
 
-        # --- Crescimento entre o primeiro e o último ponto ---
+        # --- Crescimento ---
         df_growth = (
             df_time.sort_values(["CD_DESCRITOR", "DT_REFERENCIA"])
             .groupby("CD_DESCRITOR")
-            .apply(
-                lambda s: s["TX_ACERTO"].iloc[-1] - s["TX_ACERTO"].iloc[0]
-                if len(s) > 1 else 0
-            )
+            .apply(lambda s: s["TX_ACERTO"].iloc[-1] - s["TX_ACERTO"].iloc[0] if len(s) > 1 else 0)
             .reset_index(name="Crescimento")
         )
 
-        # --- Gráfico de crescimento ---
         fig_growth = px.bar(
             df_growth.sort_values("Crescimento", ascending=False),
             x="CD_DESCRITOR",
@@ -222,23 +252,66 @@ with tab3:
     st.subheader("ℹ️ Informações do descritor")
 
     st.write("Tabela com os descritores selecionados:")
+
+    # --- Agregação final por descritor ---
+    df_descritor_agg = (
+        df_descritor.groupby(["CD_DESCRITOR", "NM_DESCRITOR", "NM_DISCIPLINA"], as_index=False)
+        .agg({"QTD_ITENS": "sum", "QTD_ACERTOS": "sum", "QTD_ERROS": "sum"})
+    )
+
+    df_descritor_agg["TX_ACERTO"] = np.where(
+        (df_descritor_agg["QTD_ACERTOS"] + df_descritor_agg["QTD_ERROS"]) > 0,
+        (df_descritor_agg["QTD_ACERTOS"] / (df_descritor_agg["QTD_ACERTOS"] + df_descritor_agg["QTD_ERROS"])) * 100,
+        np.nan
+    )
+
+    # --- Exibir tabela agregada ---
     st.dataframe(
-        df_filt[["CD_DESCRITOR", "NM_DISCIPLINA", "QTD_ITENS", "QTD_ACERTOS", "TX_ACERTO"]]
-        .drop_duplicates(subset="CD_DESCRITOR")
-        .reset_index(drop=True),
+        df_descritor_agg[[
+            "CD_DESCRITOR", "NM_DESCRITOR", "NM_DISCIPLINA",
+            "QTD_ITENS", "QTD_ACERTOS", "TX_ACERTO"
+        ]].round({"TX_ACERTO": 2}),
         use_container_width=True
     )
 
     st.write("Estatísticas descritivas:")
-    st.dataframe(df_filt[["TX_ACERTO", "QTD_ITENS", "QTD_ACERTOS"]].describe(), use_container_width=True)
+    st.dataframe(
+        df_filt[["TX_ACERTO", "QTD_ITENS", "QTD_ACERTOS"]].describe(),
+        use_container_width=True
+    )
+
+    # --- Boxplot estético e legível ---
+    # Ordena os descritores pela mediana de acerto (do menor ao maior)
+    ordenacao_descritores = (
+        df_filt.groupby("CD_DESCRITOR")["TX_ACERTO"].median().sort_values().index
+    )
 
     fig_box = px.box(
         df_filt,
         x="CD_DESCRITOR",
         y="TX_ACERTO",
+        category_orders={"CD_DESCRITOR": ordenacao_descritores},
+        color="CD_DESCRITOR",
         title="Distribuição da taxa de acerto por descritor",
-        labels={"TX_ACERTO": "Taxa de acerto", "CD_DESCRITOR": "Descritor"},
-        points="all"
+        labels={"TX_ACERTO": "Taxa de acerto (%)", "CD_DESCRITOR": "Descritor"},
     )
-    fig_box.update_layout(height=400, xaxis_tickangle=-45)
+
+    # --- Ajustes visuais ---
+    fig_box.update_traces(
+        marker=dict(opacity=0.35, size=3),  # pontos discretos
+        line=dict(width=1.2),
+        fillcolor="rgba(66, 135, 245, 0.3)"
+    )
+
+    fig_box.update_layout(
+        height=600,
+        showlegend=False,
+        xaxis_tickangle=-45,
+        xaxis=dict(showgrid=False, tickfont=dict(size=10)),
+        yaxis=dict(range=[0, 100], title="Taxa de acerto (%)"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#f5f5f5"),
+    )
+
     st.plotly_chart(fig_box, use_container_width=True)
