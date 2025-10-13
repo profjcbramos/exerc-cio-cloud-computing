@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+from pathlib import Path
+
 
 # ==============================
 # CONFIGURAÇÃO BÁSICA
@@ -134,10 +136,10 @@ df_filt["TX_ACERTO"] = np.where(
 # =======================================
 # MERGE COM A BASE DE DESCRITORES
 # =======================================
-descritores_info = pd.read_csv(
-    '/workspaces/exerc-cio-cloud-computing/data/descritores_paebes_23_24.csv',
-    encoding='ISO-8859-1', sep=';'
-)
+base_path = Path(__file__).resolve().parent.parent  # sobe um nível
+csv_path = base_path / "data" / "descritores_paebes_23_24.csv"
+
+descritores_info = pd.read_csv(csv_path, encoding="ISO-8859-1", sep=";")
 descritores_info["CD_DESCRITOR"] = descritores_info["CD_DESCRITOR"].astype(str).str.strip()
 descritores_info["NM_DESCRITOR"] = descritores_info["NM_DESCRITOR"].astype(str).str.strip()
 
