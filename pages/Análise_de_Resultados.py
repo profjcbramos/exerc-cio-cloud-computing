@@ -140,6 +140,9 @@ base_path = Path(__file__).resolve().parent.parent  # sobe um nível
 csv_path = base_path / "data" / "descritores_paebes_23_24.csv"
 
 descritores_info = pd.read_csv(csv_path, encoding="ISO-8859-1", sep=";")
+# --- Remove linhas com descrições incompletas (ex: "Recon..." etc.) ---
+descritores_info = descritores_info[~descritores_info["NM_DESCRITOR"].str.startswith("Recon", na=False)]
+
 descritores_info["CD_DESCRITOR"] = descritores_info["CD_DESCRITOR"].astype(str).str.strip()
 descritores_info["NM_DESCRITOR"] = descritores_info["NM_DESCRITOR"].astype(str).str.strip()
 
