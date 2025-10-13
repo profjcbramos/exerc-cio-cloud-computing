@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 # ==============================
 # CONFIGURAÇÃO BÁSICA
@@ -21,7 +22,7 @@ st.markdown("""
 <hr style='margin-top: 0; margin-bottom: 10px;'>
 """, unsafe_allow_html=True)
 
-st.write("Gráficos com resultados dos descritores, número de itens, série histórica, com filtros por regional, escola, etapa, etc.")
+st.write("Gráficos com resultados dos descritores, número de itens, série histórica, com filtros por regional, escola, etapa, etc. [Dados de amostra]")
 
 # ==============================
 # CARREGAMENTO DE DADOS
@@ -56,6 +57,7 @@ if df.empty:
 # ==============================
 st.sidebar.header("🎯 Filtros de Análise")
 
+# ---- Componente curricular ----
 componentes = sorted(df["NM_DISCIPLINA"].dropna().unique())
 componente = st.sidebar.selectbox("Componente curricular", componentes)
 
@@ -63,6 +65,7 @@ if not componente:
     st.info("Selecione um componente curricular para iniciar a análise.")
     st.stop()
 
+# ---- Descritores ----
 descritores = sorted(df.query("NM_DISCIPLINA == @componente")["CD_DESCRITOR"].dropna().unique())
 st.sidebar.markdown("#### Seleção de descritores")
 select_all = st.sidebar.checkbox("Selecionar todos", value=True)
@@ -72,32 +75,48 @@ if select_all:
 else:
     descritores_selecionados = st.sidebar.multiselect("Escolha os descritores", descritores)
 
+# ---- Nível de análise ----
 nivel = st.sidebar.radio("Nível de granularidade", ["Estado", "Regional", "Município", "Escola"], horizontal=True)
 
+# ---- Filtros dinâmicos ----
 regiao = municipio = escola = None
+
 if nivel in ["Regional", "Município", "Escola"]:
-    regioes = sorted(df["NM_REGIONAL"].dropna().unique())
-    regiao = st.sidebar.selectbox("Regional", regioes)
+    regioes = sorted(
+    df["NM_REGIONAL"]
+    .dropna()                              # remove np.nan
+    .astype(str)                           # garante strings
+    .loc[lambda x: ~x.str.lower().eq("nan")]  # remove 'nan' textual
+    .unique()
+    )
 
-if nivel in ["Município", "Escola"] and regiao:
+    regiao = st.sidebar.selectbox("Regional", ["(Todas)"] + regioes)
+
+if nivel in ["Município", "Escola"] and regiao and regiao != "(Todas)":
     municipios = sorted(df.query("NM_REGIONAL == @regiao")["NM_MUNICIPIO"].dropna().unique())
-    municipio = st.sidebar.selectbox("Município", municipios)
+    municipio = st.sidebar.selectbox("Município", ["(Todos)"] + municipios)
 
-if nivel == "Escola" and municipio:
+if nivel == "Escola" and municipio and municipio != "(Todos)":
     escolas = sorted(df.query("NM_MUNICIPIO == @municipio")["NM_ESCOLA"].dropna().unique())
-    escola = st.sidebar.selectbox("Escola", escolas)
+    escola = st.sidebar.selectbox("Escola", ["(Todas)"] + escolas)
 
 # ==============================
 # FILTRO APLICADO À BASE
 # ==============================
 df_filt = df.query("NM_DISCIPLINA == @componente and CD_DESCRITOR in @descritores_selecionados").copy()
 
-if nivel == "Regional" and regiao:
+# ---- Aplicação condicional dos filtros ----
+if nivel == "Regional" and regiao and regiao != "(Todas)":
     df_filt = df_filt.query("NM_REGIONAL == @regiao")
-elif nivel == "Município" and municipio:
+elif nivel == "Município" and municipio and municipio != "(Todos)":
     df_filt = df_filt.query("NM_MUNICIPIO == @municipio")
-elif nivel == "Escola" and escola:
+elif nivel == "Escola" and escola and escola != "(Todas)":
     df_filt = df_filt.query("NM_ESCOLA == @escola")
+elif nivel == "Estado":
+    # Se o nível for Estado, nenhuma filtragem adicional é aplicada
+    # Isso representa a rede estadual completa
+    pass
+
 
 st.markdown("---")
 tab1, tab2, tab3 = st.tabs([
@@ -145,11 +164,20 @@ with tab2:
     if df_filt.empty:
         st.warning("Nenhum dado encontrado com os filtros aplicados.")
     else:
+        # --- Agregação correta: somar acertos e erros por data e descritor ---
         df_time = (
-            df_filt.groupby(["DT_REFERENCIA", "CD_DESCRITOR"], as_index=False)["TX_ACERTO"]
-            .mean()
+            df_filt.groupby(["DT_REFERENCIA", "CD_DESCRITOR"], as_index=False)
+            .agg({"QTD_ACERTOS": "sum", "QTD_ERROS": "sum"})
         )
 
+        # --- Calcular taxa ponderada ---
+        df_time["TX_ACERTO"] = np.where(
+            (df_time["QTD_ACERTOS"] + df_time["QTD_ERROS"]) > 0,
+            (df_time["QTD_ACERTOS"] / (df_time["QTD_ACERTOS"] + df_time["QTD_ERROS"])) * 100,
+            np.nan,
+        )
+
+        # --- Gráfico de linha (série histórica) ---
         fig_line = px.line(
             df_time,
             x="DT_REFERENCIA",
@@ -158,27 +186,34 @@ with tab2:
             markers=True,
             hover_name="CD_DESCRITOR",
             title=f"Evolução da taxa de acerto - {componente}",
-            labels={"DT_REFERENCIA": "Data da avaliação", "TX_ACERTO": "Taxa de acerto"},
+            labels={"DT_REFERENCIA": "Data da avaliação", "TX_ACERTO": "Taxa de acerto (%)"},
         )
         fig_line.update_layout(height=500)
         st.plotly_chart(fig_line, use_container_width=True)
 
-        # Crescimento médio
+        # --- Crescimento entre o primeiro e o último ponto ---
         df_growth = (
-            df_time.groupby("CD_DESCRITOR")["TX_ACERTO"]
-            .apply(lambda s: s.iloc[-1] - s.iloc[0] if len(s) > 1 else 0)
+            df_time.sort_values(["CD_DESCRITOR", "DT_REFERENCIA"])
+            .groupby("CD_DESCRITOR")
+            .apply(
+                lambda s: s["TX_ACERTO"].iloc[-1] - s["TX_ACERTO"].iloc[0]
+                if len(s) > 1 else 0
+            )
             .reset_index(name="Crescimento")
         )
 
+        # --- Gráfico de crescimento ---
         fig_growth = px.bar(
             df_growth.sort_values("Crescimento", ascending=False),
             x="CD_DESCRITOR",
             y="Crescimento",
             title="Crescimento médio dos descritores (último - primeiro registro)",
             text_auto=".2f",
+            labels={"Crescimento": "Variação da taxa de acerto (p.p.)"},
         )
         fig_growth.update_layout(height=400, xaxis_tickangle=-45)
         st.plotly_chart(fig_growth, use_container_width=True)
+
 
 # ==============================
 # TAB 3: INFORMAÇÕES DO DESCRITOR
